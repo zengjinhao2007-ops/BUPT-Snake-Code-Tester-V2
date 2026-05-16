@@ -34,16 +34,6 @@ namespace SnakeOJTester
             return cases;
         }
 
-        public static List<TestCase> CreateBuiltInScoringCases()
-        {
-            List<TestCase> cases = new List<TestCase>();
-            for (int i = 0; i < ScoringNs.Length; i++)
-            {
-                cases.Add(CreateRandomOjLikeCase(20260506 + i * 97, ScoringNs[i], "跑分用例-" + (i + 1).ToString("00") + "  N=" + ScoringNs[i], true));
-            }
-            return cases;
-        }
-
         public static List<TestCase> CreateRandomScoringCases(int groupSeed)
         {
             List<TestCase> cases = new List<TestCase>();
@@ -308,6 +298,14 @@ namespace SnakeOJTester
                 for (int c = 0; c < 20; c++)
                 {
                     char ch = map[r][c];
+                    if (!IsValidMapChar(ch))
+                    {
+                        throw new InvalidOperationException("测试地图第 " + r + " 行第 " + c + " 列包含非法字符 `" + ch + "`。");
+                    }
+                    if ((r == 0 || c == 0 || r == 19 || c == 19) && ch != '#')
+                    {
+                        throw new InvalidOperationException("测试地图边界必须全部为墙 `#`，第 " + r + " 行第 " + c + " 列不符合要求。");
+                    }
                     if (ch == 'H')
                     {
                         head++;
@@ -343,6 +341,16 @@ namespace SnakeOJTester
             {
                 throw new InvalidOperationException("测试地图必须正好有 10 个障碍物 O。");
             }
+        }
+
+        private static bool IsValidMapChar(char ch)
+        {
+            return ch == '#'
+                || ch == '.'
+                || ch == 'O'
+                || ch == 'H'
+                || ch == 'B'
+                || ch == 'F';
         }
 
         private static bool HasUniqueInitialSnakeOrder(Point head, List<Point> body)

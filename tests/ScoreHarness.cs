@@ -41,7 +41,16 @@ internal static class ScoreHarness
             weighted += result.Score * w;
             raw += result.Score;
             count++;
-            Console.WriteLine(scoringCases[i].Name + " status=" + result.StatusText + " score=" + result.Score + " weighted=" + (result.Score * w).ToString("0.##") + " timeMs=" + result.ElapsedMs);
+            string timeText = result.ElapsedMs.ToString();
+            if (result.TimeLimitExceededAtMs > 0)
+            {
+                timeText += " timeoutAt=" + result.TimeLimitExceededAtMs;
+                if (result.StoppedAtDiagnosticLimit)
+                {
+                    timeText += " diagnosticLimit=" + result.DiagnosticLimitMs;
+                }
+            }
+            Console.WriteLine(scoringCases[i].Name + " status=" + result.StatusText + " score=" + result.Score + " weighted=" + (result.Score * w).ToString("0.##") + " timeMs=" + timeText);
         }
         Console.WriteLine("count=" + count + " raw=" + raw + " weighted=" + weighted.ToString("0.##"));
         return 0;

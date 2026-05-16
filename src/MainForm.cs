@@ -552,13 +552,13 @@ namespace SnakeOJTester
             _finalTimeoutBox.Value = 400;
             _finalTimeoutBox.Visible = false;
 
-            AddAdvancedRow(panel, 0, "时间限制(ms)", _timeLimitBox, "默认 400ms。按单个用例总运行时间限制，超时直接判 TLE。");
+            AddAdvancedRow(panel, 0, "时间限制(ms)", _timeLimitBox, "默认 400ms。超过即判 TLE；默认最多继续观察到 3000ms 用于显示诊断用时。");
             AddAdvancedRow(panel, 1, "内存限制(MB)", _memoryLimitBox, "默认 64MB。运行时监控学生程序私有内存，超过即停止。");
             AddAdvancedRow(panel, 2, "代码长度(KB)", _codeLengthLimitBox, "默认 16KB。编译前按 UTF-8 字节数检查，超过会在编译前拦截。");
             AddAdvancedRow(panel, 3, "栈限制(KB)", _stackLimitBox, "默认 8192KB。编译时通过链接器设置 Windows 程序栈大小。");
 
             TextBox note = MakeReadOnlyTextBox();
-            note.Text = "限制说明：本工具不再使用步数上限。每个用例默认按时间 400ms、内存 64MB、代码长度 16KB、栈 8192KB 限制；食物生成采用固定 seed 的 C 风格伪随机规则，尽量贴近学校 OJ 的交互形态。";
+            note.Text = "限制说明：本工具不再使用步数上限。每个用例默认按时间 400ms、内存 64MB、代码长度 16KB、栈 8192KB 限制；超过时间限制后仍判 TLE，但会最多继续观察到 3000ms，若仍未结束会强制停止。食物生成采用固定 seed 的 C 风格伪随机规则，尽量贴近学校 OJ 的交互形态。";
             note.Height = 100;
             note.MinimumSize = new Size(0, 96);
             panel.Controls.Add(note, 0, 4);
@@ -892,6 +892,7 @@ namespace SnakeOJTester
             options.TimeLimitMs = (int)_timeLimitBox.Value;
             options.LineTimeoutMs = options.TimeLimitMs;
             options.FinalTimeoutMs = options.TimeLimitMs;
+            options.TimeoutObservationMs = 3000;
             options.MemoryLimitKb = (int)_memoryLimitBox.Value * 1024;
             options.CodeLengthLimitKb = (int)_codeLengthLimitBox.Value;
             options.StackLimitKb = (int)_stackLimitBox.Value;
@@ -926,6 +927,12 @@ namespace SnakeOJTester
             {
                 BeginInvoke(new MethodInvoker(delegate
                 {
+                    if (task.IsFaulted || task.IsCanceled)
+                    {
+                        _compileBox.Text = "编译任务异常：" + TaskFailureMessage(task);
+                        UpdateBusyState(false, "编译异常");
+                        return;
+                    }
                     CompileResult cr = task.Result;
                     _compileBox.Text = cr.Message + Environment.NewLine + Environment.NewLine + cr.CompilerOutput;
                     UpdateBusyState(false, cr.Success ? "编译成功" : "编译失败");
@@ -997,6 +1004,14 @@ namespace SnakeOJTester
             {
                 BeginInvoke(new MethodInvoker(delegate
                 {
+                    if (task.IsFaulted || task.IsCanceled)
+                    {
+                        _compileBox.Text = "评测任务异常：" + TaskFailureMessage(task);
+                        _scoreSummaryLabel.Text = "评测器后台任务异常，当前结果未完成。请查看编译/运行信息后重试。";
+                        _scoreSummaryLabel.BackColor = Color.FromArgb(255, 247, 237);
+                        UpdateBusyState(false, "评测异常");
+                        return;
+                    }
                     ApplyRunPayload(task.Result, batch);
                     UpdateBusyState(false, "运行完成");
                 }));
@@ -1045,25 +1060,6 @@ namespace SnakeOJTester
                 _scoreSummaryLabel.Text = "正在运行当前用例：本次会重新编译当前代码。代码指纹：" + _lastRunCodeFingerprint + "。";
                 _scoreSummaryLabel.BackColor = Color.FromArgb(245, 247, 250);
             }
-        }
-
-        private List<int> BuildRunIndexes(bool batch, int selectedIndex)
-        {
-            List<int> indexes = new List<int>();
-            if (!batch)
-            {
-                indexes.Add(selectedIndex);
-                return indexes;
-            }
-
-            for (int i = 0; i < _cases.Count; i++)
-            {
-                if (!_scoreMode || _cases[i].IsScoringCase)
-                {
-                    indexes.Add(i);
-                }
-            }
-            return indexes;
         }
 
         private List<TestCase> BuildRunCases(bool batch, int selectedIndex, out string scoringGroupLabel, out bool usedRandomScoringGroup)
@@ -1199,22 +1195,47 @@ namespace SnakeOJTester
                 return "";
             }
 
-            if (result.HideElapsedMs || result.Status == JudgeStatus.TimeLimitExceeded)
-            {
-                return "超时未显示；可在高级设置上调时间后重测";
-            }
-
+            string elapsed = "";
             if (result.ProgramElapsedMs >= 0)
             {
-                return result.ProgramElapsedMs.ToString();
+                elapsed = result.ProgramElapsedMs.ToString();
             }
-
-            if (result.ElapsedMs >= 0)
+            else if (result.ElapsedMs >= 0)
             {
-                return result.ElapsedMs.ToString();
+                elapsed = result.ElapsedMs.ToString();
             }
 
-            return "";
+            if (result.Status == JudgeStatus.TimeLimitExceeded && result.TimeLimitExceededAtMs > 0)
+            {
+                if (result.StoppedAtDiagnosticLimit)
+                {
+                    return elapsed + "（超时点 " + result.TimeLimitExceededAtMs + "，已到 " + result.DiagnosticLimitMs + "ms 上限）";
+                }
+                return elapsed + "（超时点 " + result.TimeLimitExceededAtMs + "）";
+            }
+
+            return elapsed;
+        }
+
+        private static string TaskFailureMessage(Task task)
+        {
+            if (task == null)
+            {
+                return "未知错误。";
+            }
+            if (task.IsCanceled)
+            {
+                return "任务已取消。";
+            }
+            if (task.Exception != null)
+            {
+                Exception ex = task.Exception.GetBaseException();
+                if (ex != null)
+                {
+                    return ex.Message;
+                }
+            }
+            return "未知错误。";
         }
 
         private void FillResultGrid()

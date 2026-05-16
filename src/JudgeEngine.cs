@@ -315,24 +315,55 @@ namespace SnakeOJTester
             }
             catch (Exception ex)
             {
-                SetStatus(result, JudgeStatus.RuntimeError, "评测过程异常：" + ex.Message);
+                if (session.LimitStatus != JudgeStatus.NotRun)
+                {
+                    SetStatus(result, session.LimitStatus, session.LimitMessage);
+                }
+                else
+                {
+                    SetStatus(result, JudgeStatus.RuntimeError, "评测过程异常：" + ex.Message);
+                }
                 result.Score = state.Score;
                 result.Steps = state.MoveCount;
             }
             finally
             {
                 elapsed.Stop();
-                result.ProgramElapsedMs = session.ProgramElapsedMs;
-                if (result.Status == JudgeStatus.TimeLimitExceeded)
+                long programElapsedMs = session.ProgramElapsedMs;
+                long timeLimitExceededAtMs = session.TimeLimitExceededAtMs;
+                result.TimeLimitExceededAtMs = timeLimitExceededAtMs;
+                result.DiagnosticLimitMs = session.DiagnosticLimitMs;
+                result.StoppedAtDiagnosticLimit = session.StoppedAtDiagnosticLimit;
+                if (!result.StoppedAtDiagnosticLimit
+                    && timeLimitExceededAtMs > 0
+                    && result.DiagnosticLimitMs > 0
+                    && programElapsedMs >= result.DiagnosticLimitMs - 5
+                    && !session.HasExited)
                 {
-                    result.HideElapsedMs = true;
-                    result.ElapsedMs = -1;
+                    result.StoppedAtDiagnosticLimit = true;
                 }
-                else
+                if (session.LimitStatus != JudgeStatus.NotRun)
                 {
-                    result.HideElapsedMs = false;
-                    result.ElapsedMs = result.ProgramElapsedMs;
+                    SetStatus(result, session.LimitStatus, session.LimitMessage);
                 }
+                else if (result.StoppedAtDiagnosticLimit && timeLimitExceededAtMs > 0)
+                {
+                    SetStatus(result, JudgeStatus.TimeLimitExceeded, TimeLimitMessage(options, timeLimitExceededAtMs, programElapsedMs, true));
+                }
+                else if (timeLimitExceededAtMs > 0 && result.Status != JudgeStatus.MemoryLimitExceeded)
+                {
+                    SetStatus(result, JudgeStatus.TimeLimitExceeded, TimeLimitMessage(options, timeLimitExceededAtMs, programElapsedMs, false));
+                }
+                else if (options.TimeLimitMs > 0
+                    && programElapsedMs > options.TimeLimitMs
+                    && result.Status != JudgeStatus.MemoryLimitExceeded)
+                {
+                    timeLimitExceededAtMs = programElapsedMs;
+                    result.TimeLimitExceededAtMs = timeLimitExceededAtMs;
+                    SetStatus(result, JudgeStatus.TimeLimitExceeded, TimeLimitMessage(options, timeLimitExceededAtMs, programElapsedMs, false));
+                }
+                result.ProgramElapsedMs = programElapsedMs;
+                result.ElapsedMs = programElapsedMs;
                 result.InteractionLog = recorder.GetLog();
                 result.Snapshots = recorder.GetSnapshots();
                 result.ProgramError = session.GetStderr();
@@ -470,6 +501,30 @@ namespace SnakeOJTester
             result.Status = status;
             result.StatusText = ToChineseStatus(status);
             result.Message = message;
+        }
+
+        internal static string TimeLimitMessage(RunOptions options, long exceededAtMs, long usedMs, bool stoppedAtDiagnosticLimit)
+        {
+            int diagnosticLimit = DiagnosticLimitMs(options);
+            if (stoppedAtDiagnosticLimit)
+            {
+                return "时间超限：本地限制为 " + options.TimeLimitMs + "ms，程序在约 " + exceededAtMs + "ms 时已超时；测试器已继续观察到诊断上限 " + diagnosticLimit + "ms 仍未完成，已强制停止。若想查看实际分数，请在“高级设置”里调高时间限制后重测。";
+            }
+            return "时间超限：本地限制为 " + options.TimeLimitMs + "ms，程序在约 " + exceededAtMs + "ms 时已超时；测试器为了诊断继续运行到约 " + usedMs + "ms。本次分数列显示延长运行得到的分数，正式判题仍为超时。";
+        }
+
+        internal static int DiagnosticLimitMs(RunOptions options)
+        {
+            if (options == null)
+            {
+                return 3000;
+            }
+            int observation = options.TimeoutObservationMs > 0 ? options.TimeoutObservationMs : 3000;
+            if (options.TimeLimitMs > observation)
+            {
+                return options.TimeLimitMs;
+            }
+            return observation;
         }
 
         public static string ToChineseStatus(JudgeStatus status)
@@ -1006,6 +1061,8 @@ namespace SnakeOJTester
         private volatile bool _disposed;
         private Stopwatch _programTimer;
         private long _programElapsedMs;
+        private long _timeLimitExceededAtMs;
+        private long _diagnosticLimitReachedAtMs;
         private readonly object _programTimerLock = new object();
 
         public JudgeStatus LimitStatus;
@@ -1020,6 +1077,8 @@ namespace SnakeOJTester
             LimitStatus = JudgeStatus.NotRun;
             LimitMessage = "";
             _programElapsedMs = 0;
+            _timeLimitExceededAtMs = 0;
+            _diagnosticLimitReachedAtMs = 0;
         }
 
         public bool HasExited
@@ -1068,6 +1127,21 @@ namespace SnakeOJTester
                     return _programElapsedMs;
                 }
             }
+        }
+
+        public long TimeLimitExceededAtMs
+        {
+            get { return Interlocked.Read(ref _timeLimitExceededAtMs); }
+        }
+
+        public bool StoppedAtDiagnosticLimit
+        {
+            get { return Interlocked.Read(ref _diagnosticLimitReachedAtMs) > 0; }
+        }
+
+        public long DiagnosticLimitMs
+        {
+            get { return EffectiveDiagnosticLimitMs(); }
         }
 
         public void Start(string exePath, string workingDirectory, RunOptions options)
@@ -1137,8 +1211,8 @@ namespace SnakeOJTester
         {
             line = null;
             Stopwatch wait = Stopwatch.StartNew();
-            int effectiveTimeout = Math.Max(1, timeoutMs);
-            while (wait.ElapsedMilliseconds <= effectiveTimeout)
+            int effectiveTimeout = EffectiveReadTimeoutMs(timeoutMs);
+            while (wait.ElapsedMilliseconds < effectiveTimeout)
             {
                 if (_stdoutLines.TryDequeue(out line))
                 {
@@ -1187,7 +1261,8 @@ namespace SnakeOJTester
             bool exited;
             try
             {
-                exited = _process.WaitForExit(timeoutMs);
+                int effectiveTimeout = TimeLimitExceededAtMs > 0 ? RemainingDiagnosticTimeMs() : Math.Max(1, timeoutMs);
+                exited = _process.WaitForExit(effectiveTimeout);
             }
             catch
             {
@@ -1220,9 +1295,22 @@ namespace SnakeOJTester
                     long usedMs = ProgramElapsedMs;
                     if (_options != null && _options.TimeLimitMs > 0 && usedMs > _options.TimeLimitMs)
                     {
+                        MarkTimeLimitExceeded(usedMs);
+                    }
+
+                    int diagnosticLimit = EffectiveDiagnosticLimitMs();
+                    if (diagnosticLimit > 0 && usedMs > diagnosticLimit)
+                    {
+                        long exceededAtMs = TimeLimitExceededAtMs;
+                        if (exceededAtMs <= 0)
+                        {
+                            exceededAtMs = usedMs;
+                            MarkTimeLimitExceeded(usedMs);
+                        }
+                        Interlocked.CompareExchange(ref _diagnosticLimitReachedAtMs, usedMs, 0);
                         LimitStatus = JudgeStatus.TimeLimitExceeded;
-                        LimitMessage = "时间超限：本地限制为 " + _options.TimeLimitMs + "ms（按学生程序单个用例运行时间监控）。如需查看实际耗时，可在“高级设置”中上调时间限制后重测。";
-                        TryKillProcess();
+                        LimitMessage = JudgeEngine.TimeLimitMessage(_options, exceededAtMs, usedMs, true);
+                        TryKillProcessTree();
                         StopProgramTimer();
                         _lineEvent.Set();
                         return;
@@ -1244,7 +1332,7 @@ namespace SnakeOJTester
                         {
                             LimitStatus = JudgeStatus.MemoryLimitExceeded;
                             LimitMessage = "内存超限：本地限制为 " + (_options.MemoryLimitKb / 1024) + "MB，当前私有内存约 " + (memoryBytes / 1024 / 1024) + "MB。";
-                            TryKillProcess();
+                            TryKillProcessTree();
                             StopProgramTimer();
                             _lineEvent.Set();
                             return;
@@ -1261,6 +1349,48 @@ namespace SnakeOJTester
                     interval = _options.LimitCheckIntervalMs;
                 }
                 Thread.Sleep(Math.Max(5, interval));
+            }
+        }
+
+        private int EffectiveReadTimeoutMs(int requestedTimeoutMs)
+        {
+            int remaining = RemainingDiagnosticTimeMs();
+            if (remaining > 0)
+            {
+                return remaining;
+            }
+            return Math.Max(1, requestedTimeoutMs);
+        }
+
+        private int RemainingDiagnosticTimeMs()
+        {
+            int diagnosticLimit = EffectiveDiagnosticLimitMs();
+            if (diagnosticLimit <= 0)
+            {
+                return 0;
+            }
+            long remaining = diagnosticLimit - ProgramElapsedMs;
+            if (remaining <= 0)
+            {
+                return 1;
+            }
+            if (remaining > int.MaxValue)
+            {
+                return int.MaxValue;
+            }
+            return (int)remaining;
+        }
+
+        private int EffectiveDiagnosticLimitMs()
+        {
+            return JudgeEngine.DiagnosticLimitMs(_options);
+        }
+
+        private void MarkTimeLimitExceeded(long usedMs)
+        {
+            if (Interlocked.CompareExchange(ref _timeLimitExceededAtMs, usedMs, 0) == 0)
+            {
+                _lineEvent.Set();
             }
         }
 
@@ -1302,11 +1432,51 @@ namespace SnakeOJTester
             }
         }
 
+        private void TryKillProcessTree()
+        {
+            int pid = 0;
+            try
+            {
+                if (_process != null && !_process.HasExited)
+                {
+                    pid = _process.Id;
+                }
+            }
+            catch
+            {
+                pid = 0;
+            }
+
+            if (pid > 0)
+            {
+                try
+                {
+                    ProcessStartInfo psi = new ProcessStartInfo();
+                    psi.FileName = "taskkill.exe";
+                    psi.Arguments = "/PID " + pid + " /T /F";
+                    psi.UseShellExecute = false;
+                    psi.CreateNoWindow = true;
+                    using (Process killer = Process.Start(psi))
+                    {
+                        if (killer != null)
+                        {
+                            killer.WaitForExit(1000);
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            TryKillProcess();
+        }
+
         public void Dispose()
         {
             _disposed = true;
             StopProgramTimer();
-            TryKillProcess();
+            TryKillProcessTree();
             try
             {
                 if (_lineEvent != null)

@@ -109,7 +109,9 @@ namespace SnakeOJTester
         public int Steps;
         public long ElapsedMs;
         public long ProgramElapsedMs;
-        public bool HideElapsedMs;
+        public long TimeLimitExceededAtMs;
+        public long DiagnosticLimitMs;
+        public bool StoppedAtDiagnosticLimit;
         public string Message;
         public string InteractionLog;
         public string ProgramError;
@@ -124,7 +126,9 @@ namespace SnakeOJTester
             Message = "";
             ElapsedMs = 0;
             ProgramElapsedMs = 0;
-            HideElapsedMs = false;
+            TimeLimitExceededAtMs = 0;
+            DiagnosticLimitMs = 0;
+            StoppedAtDiagnosticLimit = false;
             InteractionLog = "";
             ProgramError = "";
             Snapshots = new List<GridSnapshot>();
@@ -164,6 +168,7 @@ namespace SnakeOJTester
         public int MaxLogChars;
         public int LimitCheckIntervalMs;
         public int SnapshotInterval;
+        public int TimeoutObservationMs;
 
         public RunOptions()
         {
@@ -179,6 +184,7 @@ namespace SnakeOJTester
             MaxLogChars = 120000;
             LimitCheckIntervalMs = 20;
             SnapshotInterval = 1;
+            TimeoutObservationMs = 3000;
         }
     }
 

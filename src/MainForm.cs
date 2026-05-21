@@ -520,7 +520,7 @@ namespace SnakeOJTester
             _timeLimitBox.Minimum = 50;
             _timeLimitBox.Maximum = 30000;
             _timeLimitBox.Increment = 50;
-            _timeLimitBox.Value = 400;
+            _timeLimitBox.Value = 1000;
 
             _memoryLimitBox = new NumericUpDown();
             _memoryLimitBox.Minimum = 1;
@@ -532,7 +532,7 @@ namespace SnakeOJTester
             _codeLengthLimitBox.Minimum = 1;
             _codeLengthLimitBox.Maximum = 1024;
             _codeLengthLimitBox.Increment = 1;
-            _codeLengthLimitBox.Value = 16;
+            _codeLengthLimitBox.Value = 32;
 
             _stackLimitBox = new NumericUpDown();
             _stackLimitBox.Minimum = 64;
@@ -543,22 +543,22 @@ namespace SnakeOJTester
             _lineTimeoutBox = new NumericUpDown();
             _lineTimeoutBox.Minimum = 50;
             _lineTimeoutBox.Maximum = 30000;
-            _lineTimeoutBox.Value = 400;
+            _lineTimeoutBox.Value = 1000;
             _lineTimeoutBox.Visible = false;
 
             _finalTimeoutBox = new NumericUpDown();
             _finalTimeoutBox.Minimum = 50;
             _finalTimeoutBox.Maximum = 30000;
-            _finalTimeoutBox.Value = 400;
+            _finalTimeoutBox.Value = 1000;
             _finalTimeoutBox.Visible = false;
 
-            AddAdvancedRow(panel, 0, "时间限制(ms)", _timeLimitBox, "默认 400ms。超过即判 TLE；默认最多继续观察到 3000ms 用于显示诊断用时。");
+            AddAdvancedRow(panel, 0, "时间限制(ms)", _timeLimitBox, "默认 1000ms。超过即判 TLE；默认最多继续观察到 3000ms 用于显示诊断用时。");
             AddAdvancedRow(panel, 1, "内存限制(MB)", _memoryLimitBox, "默认 64MB。运行时监控学生程序私有内存，超过即停止。");
-            AddAdvancedRow(panel, 2, "代码长度(KB)", _codeLengthLimitBox, "默认 16KB。编译前按 UTF-8 字节数检查，超过会在编译前拦截。");
+            AddAdvancedRow(panel, 2, "代码长度(KB)", _codeLengthLimitBox, "默认 32KB。编译前按 UTF-8 字节数检查，超过会在编译前拦截。");
             AddAdvancedRow(panel, 3, "栈限制(KB)", _stackLimitBox, "默认 8192KB。编译时通过链接器设置 Windows 程序栈大小。");
 
             TextBox note = MakeReadOnlyTextBox();
-            note.Text = "限制说明：本工具不再使用步数上限。每个用例默认按时间 400ms、内存 64MB、代码长度 16KB、栈 8192KB 限制；超过时间限制后仍判 TLE，但会最多继续观察到 3000ms，若仍未结束会强制停止。食物生成采用固定 seed 的 C 风格伪随机规则，尽量贴近学校 OJ 的交互形态。";
+            note.Text = "限制说明：本工具不再使用步数上限。每个用例默认按时间 1000ms、内存 64MB、代码长度 32KB、栈 8192KB 限制；超过时间限制后仍判 TLE，但会最多继续观察到 3000ms，若仍未结束会强制停止。食物生成采用固定 seed 的 C 风格伪随机规则，尽量贴近学校 OJ 的交互形态。";
             note.Height = 100;
             note.MinimumSize = new Size(0, 96);
             panel.Controls.Add(note, 0, 4);
@@ -682,7 +682,7 @@ namespace SnakeOJTester
             sb.AppendLine("类型：" + (tc.IsScoringCase ? "跑分用例" : "调试用例"));
             sb.AppendLine("N：" + tc.N);
             sb.AppendLine("Seed：" + tc.Seed);
-            sb.AppendLine("限制：时间 400ms，内存 64MB，代码长度 16KB，栈 8192KB；无步数上限。");
+            sb.AppendLine("限制：时间 1000ms，内存 64MB，代码长度 32KB，栈 8192KB；无步数上限。");
             sb.AppendLine("说明：" + tc.Description);
             sb.AppendLine();
             for (int i = 0; i < tc.InitialMap.Length; i++)

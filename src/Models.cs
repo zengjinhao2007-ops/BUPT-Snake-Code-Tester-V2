@@ -172,12 +172,12 @@ namespace SnakeOJTester
 
         public RunOptions()
         {
-            LineTimeoutMs = 400;
-            FinalTimeoutMs = 400;
+            LineTimeoutMs = 1000;
+            FinalTimeoutMs = 1000;
             CompileTimeoutMs = 12000;
-            TimeLimitMs = 400;
+            TimeLimitMs = 1000;
             MemoryLimitKb = 64 * 1024;
-            CodeLengthLimitKb = 16;
+            CodeLengthLimitKb = 32;
             StackLimitKb = 8192;
             CaptureDetails = true;
             MaxSnapshotsToKeep = 300;

@@ -552,6 +552,11 @@ namespace SnakeOJTester
             _finalTimeoutBox.Value = 1000;
             _finalTimeoutBox.Visible = false;
 
+            _timeLimitBox.ValueChanged += AdvancedLimitBox_ValueChanged;
+            _memoryLimitBox.ValueChanged += AdvancedLimitBox_ValueChanged;
+            _codeLengthLimitBox.ValueChanged += AdvancedLimitBox_ValueChanged;
+            _stackLimitBox.ValueChanged += AdvancedLimitBox_ValueChanged;
+
             AddAdvancedRow(panel, 0, "时间限制(ms)", _timeLimitBox, "默认 1000ms。超过即判 TLE；默认最多继续观察到 3000ms 用于显示诊断用时。");
             AddAdvancedRow(panel, 1, "内存限制(MB)", _memoryLimitBox, "默认 64MB。运行时监控学生程序私有内存，超过即停止。");
             AddAdvancedRow(panel, 2, "代码长度(KB)", _codeLengthLimitBox, "默认 32KB。编译前按 UTF-8 字节数检查，超过会在编译前拦截。");
@@ -682,7 +687,7 @@ namespace SnakeOJTester
             sb.AppendLine("类型：" + (tc.IsScoringCase ? "跑分用例" : "调试用例"));
             sb.AppendLine("N：" + tc.N);
             sb.AppendLine("Seed：" + tc.Seed);
-            sb.AppendLine("限制：时间 1000ms，内存 64MB，代码长度 32KB，栈 8192KB；无步数上限。");
+            sb.AppendLine("限制：时间 " + CurrentTimeLimitMs() + "ms，内存 " + CurrentMemoryLimitMb() + "MB，代码长度 " + CurrentCodeLengthLimitKb() + "KB，栈 " + CurrentStackLimitKb() + "KB；无步数上限。");
             sb.AppendLine("说明：" + tc.Description);
             sb.AppendLine();
             for (int i = 0; i < tc.InitialMap.Length; i++)
@@ -691,6 +696,31 @@ namespace SnakeOJTester
             }
             sb.AppendLine(tc.N.ToString());
             _caseInfoBox.Text = sb.ToString();
+        }
+
+        private void AdvancedLimitBox_ValueChanged(object sender, EventArgs e)
+        {
+            ShowSelectedCaseInfo();
+        }
+
+        private int CurrentTimeLimitMs()
+        {
+            return _timeLimitBox == null ? 1000 : (int)_timeLimitBox.Value;
+        }
+
+        private int CurrentMemoryLimitMb()
+        {
+            return _memoryLimitBox == null ? 64 : (int)_memoryLimitBox.Value;
+        }
+
+        private int CurrentCodeLengthLimitKb()
+        {
+            return _codeLengthLimitBox == null ? 32 : (int)_codeLengthLimitBox.Value;
+        }
+
+        private int CurrentStackLimitKb()
+        {
+            return _stackLimitBox == null ? 8192 : (int)_stackLimitBox.Value;
         }
 
 

@@ -12,6 +12,13 @@ internal static class SmokeTest
             return 2;
         }
 
+        Direction parsedDirection;
+        if (DirectionHelper.TryParse("w", out parsedDirection))
+        {
+            Console.WriteLine("lowercase-direction-accepted");
+            return 1;
+        }
+
         List<TestCase> cases = TestCaseFactory.CreateDefaultCases();
         RunOptions options = new RunOptions();
         options.LineTimeoutMs = 1000;

@@ -202,7 +202,7 @@ namespace SnakeOJTester
             {
                 return false;
             }
-            char ch = char.ToUpperInvariant(text[0]);
+            char ch = text[0];
             if (ch == 'W')
             {
                 direction = Direction.Up;
